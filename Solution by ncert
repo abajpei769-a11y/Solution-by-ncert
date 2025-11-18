@@ -1,0 +1,106 @@
+solution_of_ncert/
+│
+├── app/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── routes.py
+│   ├── templates/
+│   │   ├── base.html
+│   │   ├── home.html
+│   │   ├── subject.html
+│   │   ├── chapter.html
+│   │   └── solution.html
+│   ├── static/
+│   │   ├── css/
+│   │   │   └── style.css
+│   │   └── images/
+│   │       └── ncert-logo.png
+│   └── database.db
+├── config.py
+└── run.py
+# config.py
+import os
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-for-ncert-solutions'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///database.db'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False# app/__init__.py
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from config import Config
+
+db = SQLAlchemy()
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    db.init_app(app)
+    
+    from . import routes
+    app.register_blueprint(routes.bp)
+    
+    return app# app/models.py
+from . import db
+
+class Subject(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # e.g., Mathematics, Science
+    description = db.Column(db.Text, nullable=True)
+    class_level = db.Column(db.String(20), nullable=False)  # e.g., Class 10, Class 12
+    chapters = db.relationship('Chapter', backref='subject', lazy=True)
+
+class Chapter(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subject.id'), nullable=False)
+    solutions = db.relationship('Solution', backref='chapter', lazy=True)
+
+class Solution(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question_number = db.Column(db.String(10), nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    answer_text = db.Column(db.Text, nullable=False)
+    chapter_id = db.Column(db.Integer, db.ForeignKey('chapter.id'), nullable=False)# app/routes.py
+from flask import Blueprint, render_template, request, redirect, url_for
+from .models import Subject, Chapter, Solution
+from . import db
+
+bp = Blueprint('main', __name__)
+
+@bp.route('/')
+def home():
+    subjects = Subject.query.all()
+    return render_template('home.html', subjects=subjects)
+
+@bp.route('/subject/<int:subject_id>')
+def subject(subject_id):
+    subject = Subject.query.get_or_404(subject_id)
+    return render_template('subject.html', subject=subject)
+
+@bp.route('/chapter/<int:chapter_id>')
+def chapter(chapter_id):
+    chapter = Chapter.query.get_or_404(chapter_id)
+    return render_template('chapter.html', chapter=chapter)
+
+@bp.route('/solution/<int:solution_id>')
+def solution(solution_id):
+    solution = Solution.query.get_or_404(solution_id)
+    return render_template('solution.html', solution=solution)
+
+@bp.route('/add_subject', methods=['GET', 'POST'])
+def add_subject():
+    if request.method == 'POST':
+        name = request.form['name']
+        description = request.form['description']
+        class_level = request.form['class_level']
+        subject = Subject(name=name, description=description, class_level=class_level)
+        db.session.add(subject)
+        db.session.commit()
+        return redirect(url_for('main.home'))
+    return render_template('add_subject.html')# run.py
+from app import create_app
+
+app = create_app()
+
+if __name__ == '__main__':
+    app.run(debug=True)
